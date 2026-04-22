@@ -51,7 +51,7 @@ export default function CustomersPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Khách hàng" subtitle="Phân tích và phân khúc khách hàng" preset={preset} onPresetChange={setPreset} />
+      <Header title="Khách hàng" subtitle="Phân tích và phân khúc khách hàng" />
 
       <div className="flex-1 p-6 space-y-6">
         <div className="flex justify-end">

@@ -43,8 +43,6 @@ export default function RevenuePage() {
       <Header
         title="Doanh thu"
         subtitle="Phân tích doanh thu chi tiết theo thời gian"
-        preset={preset}
-        onPresetChange={setPreset}
       />
 
       <div className="flex-1 p-6 space-y-6">

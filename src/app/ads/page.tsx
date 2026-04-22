@@ -50,7 +50,7 @@ export default function AdsPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Ads & Marketing" subtitle="Hiệu quả quảng cáo Facebook, TikTok, Google" preset={preset} onPresetChange={setPreset} />
+      <Header title="Ads & Marketing" subtitle="Hiệu quả quảng cáo Facebook, TikTok, Google" />
 
       <div className="flex-1 p-6 space-y-6">
         <div className="flex justify-end">

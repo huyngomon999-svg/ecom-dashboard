@@ -1,16 +1,8 @@
 "use client";
 import { useMemo, useState } from "react";
 import {
-  DollarSign,
-  ShoppingCart,
-  TrendingUp,
-  Megaphone,
-  BarChart2,
-  Users,
-  UserPlus,
-  RefreshCw,
-  ArrowRight,
-  GitCompare,
+  DollarSign, ShoppingCart, TrendingUp,
+  Megaphone, BarChart2, Users, UserPlus, RefreshCw, ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -30,64 +22,39 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useDateRange } from "@/hooks/useDateRange";
 import { formatVND, formatNumber, formatROAS } from "@/lib/formatters";
 import {
-  allDailyMetrics,
-  allDailyAdsMetrics,
-  allProducts,
-  allOrders,
-  filterByDateRange,
-  computeKPISummary,
-  computeKPIFromOrders,
-  getChannelRevenue,
+  allDailyMetrics, allDailyAdsMetrics, allProducts, allOrders,
+  filterByDateRange, computeKPISummary, computeKPIFromOrders, getChannelRevenue,
 } from "@/data/mock";
 import type { Channel, OrderStatus } from "@/data/types";
 
 export default function DashboardPage() {
   const { preset, setPreset, customRange, setCustomRange, dateRange, previousRange } = useDateRange();
-
-  // Compare range (second date picker)
-  const compareRange$ = useDateRange();
-  const [useCustomCompare, setUseCustomCompare] = useState(false);
-
   const [channels, setChannels] = useState<Channel[]>([]);
   const [statuses, setStatuses] = useState<OrderStatus[]>([]);
 
-  const compareRange = useCustomCompare ? compareRange$.dateRange : previousRange;
+  const metrics     = useMemo(() => filterByDateRange(allDailyMetrics,    dateRange.from,    dateRange.to),    [dateRange]);
+  const prevMetrics = useMemo(() => filterByDateRange(allDailyMetrics,    previousRange.from, previousRange.to), [previousRange]);
+  const adsMetrics  = useMemo(() => filterByDateRange(allDailyAdsMetrics, dateRange.from,    dateRange.to),    [dateRange]);
 
-  // daily metrics (cho chart + adsSpend/ROAS)
-  const metrics = useMemo(
-    () => filterByDateRange(allDailyMetrics, dateRange.from, dateRange.to),
-    [dateRange]
-  );
-  const prevMetrics = useMemo(
-    () => filterByDateRange(allDailyMetrics, compareRange.from, compareRange.to),
-    [compareRange]
-  );
-  const adsMetrics = useMemo(
-    () => filterByDateRange(allDailyAdsMetrics, dateRange.from, dateRange.to),
-    [dateRange]
-  );
-
-  // orders filtered by date + channel + status
   const hasFilter = channels.length > 0 || statuses.length > 0;
 
   const filteredOrders = useMemo(() => {
-    let data = filterByDateRange(allOrders, dateRange.from, dateRange.to);
-    if (channels.length > 0) data = data.filter((o) => channels.includes(o.channel));
-    if (statuses.length > 0) data = data.filter((o) => statuses.includes(o.status));
-    return data;
+    let d = filterByDateRange(allOrders, dateRange.from, dateRange.to);
+    if (channels.length > 0) d = d.filter((o) => channels.includes(o.channel));
+    if (statuses.length  > 0) d = d.filter((o) => statuses.includes(o.status));
+    return d;
   }, [dateRange, channels, statuses]);
 
   const filteredPrevOrders = useMemo(() => {
-    let data = filterByDateRange(allOrders, compareRange.from, compareRange.to);
-    if (channels.length > 0) data = data.filter((o) => channels.includes(o.channel));
-    if (statuses.length > 0) data = data.filter((o) => statuses.includes(o.status));
-    return data;
-  }, [compareRange, channels, statuses]);
+    let d = filterByDateRange(allOrders, previousRange.from, previousRange.to);
+    if (channels.length > 0) d = d.filter((o) => channels.includes(o.channel));
+    if (statuses.length  > 0) d = d.filter((o) => statuses.includes(o.status));
+    return d;
+  }, [previousRange, channels, statuses]);
 
-  // KPI: dùng orders khi có filter, dùng daily metrics khi không
-  const adsSpendCur  = useMemo(() => metrics.reduce((s, d) => s + d.adsSpend, 0), [metrics]);
-  const adsSpendPrev = useMemo(() => prevMetrics.reduce((s, d) => s + d.adsSpend, 0), [prevMetrics]);
-  const newCustomers = useMemo(() => metrics.reduce((s, d) => s + d.newCustomers, 0), [metrics]);
+  const adsSpendCur        = useMemo(() => metrics.reduce((s, d) => s + d.adsSpend, 0),        [metrics]);
+  const adsSpendPrev       = useMemo(() => prevMetrics.reduce((s, d) => s + d.adsSpend, 0),    [prevMetrics]);
+  const newCustomers       = useMemo(() => metrics.reduce((s, d) => s + d.newCustomers, 0),    [metrics]);
   const returningCustomers = useMemo(() => metrics.reduce((s, d) => s + d.returningCustomers, 0), [metrics]);
 
   const kpi = useMemo(() =>
@@ -98,160 +65,56 @@ export default function DashboardPage() {
   );
 
   const channelRevenue = useMemo(() => getChannelRevenue(metrics), [metrics]);
-  const topProducts = useMemo(() => allProducts.slice(0, 10), []);
-
-  const recentOrders = useMemo(() => filteredOrders.slice(0, 10), [filteredOrders]);
+  const topProducts    = useMemo(() => allProducts.slice(0, 10), []);
+  const recentOrders   = useMemo(() => filteredOrders.slice(0, 10), [filteredOrders]);
 
   const sparkline = (key: "revenue" | "orders" | "profit" | "adsSpend") =>
     metrics.slice(-14).map((d) => ({ value: d[key] }));
 
   return (
     <div className="flex flex-col min-h-full">
-      <Header
-        title="Tổng quan"
-        subtitle="Theo dõi hiệu quả kinh doanh realtime"
-        preset={preset}
-        onPresetChange={setPreset}
-      />
+      <Header title="Tổng quan" subtitle="Theo dõi hiệu quả kinh doanh realtime" />
 
       <div className="flex-1 p-6 space-y-6">
         {/* Filter bar */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          {/* Left: channel + status */}
+        <div className="flex items-start justify-between flex-wrap gap-3">
           <div className="flex items-start gap-2 flex-wrap">
             <FilterBar selectedChannels={channels} onChannelsChange={setChannels} />
             <StatusFilter selected={statuses} onChange={setStatuses} />
           </div>
-
-          {/* Right: compare range + main date range */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
-                <GitCompare size={13} />
-                So sánh:
-              </span>
-              {useCustomCompare ? (
-                <>
-                  <DateRangePicker
-                    preset={compareRange$.preset}
-                    dateRange={compareRange$.dateRange}
-                    onPresetChange={compareRange$.setPreset}
-                    onCustomRange={(r) => compareRange$.setCustomRange(r)}
-                  />
-                  <button
-                    onClick={() => setUseCustomCompare(false)}
-                    className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-danger)] underline"
-                  >
-                    Tự động
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => setUseCustomCompare(true)}
-                  className="h-9 px-3 rounded-lg border border-dashed text-xs font-medium text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] transition-colors"
-                >
-                  Tuỳ chỉnh kỳ so sánh
-                </button>
-              )}
-            </div>
-
-            <div className="w-px h-5 bg-[var(--color-border)]" />
-
-            <DateRangePicker
-              preset={preset}
-              dateRange={dateRange}
-              onPresetChange={setPreset}
-              onCustomRange={(r) => setCustomRange(r)}
-            />
-          </div>
+          <DateRangePicker
+            preset={preset}
+            dateRange={dateRange}
+            onPresetChange={setPreset}
+            onCustomRange={(r) => setCustomRange(r)}
+          />
         </div>
 
-        {/* KPI Grid */}
+        {/* KPI row 1 */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-          <KPICard
-            title="Tổng doanh thu"
-            value={formatVND(kpi.totalRevenue, true) + "₫"}
-            change={kpi.revenueChange}
-            icon={DollarSign}
-            iconColor="blue"
-            sparkline={sparkline("revenue")}
-          />
-          <KPICard
-            title="Tổng đơn hàng"
-            value={formatNumber(kpi.totalOrders)}
-            change={kpi.ordersChange}
-            icon={ShoppingCart}
-            iconColor="purple"
-            sparkline={sparkline("orders")}
-          />
-          <KPICard
-            title="AOV"
-            value={formatVND(kpi.aov, true) + "₫"}
-            change={kpi.aovChange}
-            icon={TrendingUp}
-            iconColor="green"
-          />
-          <KPICard
-            title="Chi phí Ads"
-            value={formatVND(kpi.adsSpend, true) + "₫"}
-            change={kpi.adsSpendChange}
-            icon={Megaphone}
-            iconColor="orange"
-            sparkline={sparkline("adsSpend")}
-          />
-          <KPICard
-            title="ROAS"
-            value={formatROAS(kpi.roas)}
-            change={kpi.roasChange}
-            icon={BarChart2}
-            iconColor="blue"
-          />
+          <KPICard title="Tổng doanh thu"  value={formatVND(kpi.totalRevenue, true) + "₫"} change={kpi.revenueChange}  icon={DollarSign} iconColor="blue"   sparkline={sparkline("revenue")} />
+          <KPICard title="Tổng đơn hàng"   value={formatNumber(kpi.totalOrders)}            change={kpi.ordersChange}   icon={ShoppingCart} iconColor="purple" sparkline={sparkline("orders")} />
+          <KPICard title="AOV"              value={formatVND(kpi.aov, true) + "₫"}          change={kpi.aovChange}      icon={TrendingUp}   iconColor="green" />
+          <KPICard title="Chi phí Ads"      value={formatVND(kpi.adsSpend, true) + "₫"}     change={kpi.adsSpendChange} icon={Megaphone}    iconColor="orange" sparkline={sparkline("adsSpend")} />
+          <KPICard title="ROAS"             value={formatROAS(kpi.roas)}                     change={kpi.roasChange}     icon={BarChart2}    iconColor="blue" />
         </div>
 
+        {/* KPI row 2 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KPICard
-            title="Lợi nhuận ước tính"
-            value={formatVND(kpi.profit, true) + "₫"}
-            change={kpi.profitChange}
-            icon={TrendingUp}
-            iconColor="green"
-            sparkline={sparkline("profit")}
-          />
-          <KPICard
-            title="Tỷ lệ huỷ đơn"
-            value={`${kpi.cancelRate.toFixed(1)}%`}
-            icon={RefreshCw}
-            iconColor="red"
-          />
-          <KPICard
-            title="Khách hàng mới"
-            value={formatNumber(kpi.newCustomers)}
-            icon={UserPlus}
-            iconColor="purple"
-          />
-          <KPICard
-            title="Khách quay lại"
-            value={formatNumber(kpi.returningCustomers)}
-            icon={Users}
-            iconColor="green"
-          />
+          <KPICard title="Lợi nhuận ước tính" value={formatVND(kpi.profit, true) + "₫"} change={kpi.profitChange} icon={TrendingUp} iconColor="green" sparkline={sparkline("profit")} />
+          <KPICard title="Tỷ lệ huỷ đơn"     value={`${kpi.cancelRate.toFixed(1)}%`}                              icon={RefreshCw}  iconColor="red" />
+          <KPICard title="Khách hàng mới"     value={formatNumber(kpi.newCustomers)}                               icon={UserPlus}   iconColor="purple" />
+          <KPICard title="Khách quay lại"     value={formatNumber(kpi.returningCustomers)}                         icon={Users}      iconColor="green" />
         </div>
 
         {/* Charts row 1 */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <Card className="xl:col-span-2">
-            <CardHeader
-              title="Doanh thu & Lợi nhuận"
-              description={`${metrics.length} ngày gần nhất`}
-              action={
-                <Link href="/revenue" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">
-                  Xem chi tiết <ArrowRight size={12} />
-                </Link>
-              }
+            <CardHeader title="Doanh thu & Lợi nhuận" description={`${metrics.length} ngày`}
+              action={<Link href="/revenue" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">Xem chi tiết <ArrowRight size={12} /></Link>}
             />
             <RevenueChart data={metrics} showProfit />
           </Card>
-
           <Card>
             <CardHeader title="Doanh thu theo kênh" />
             <ChannelPieChart data={channelRevenue} />
@@ -261,25 +124,14 @@ export default function DashboardPage() {
         {/* Charts row 2 */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <Card>
-            <CardHeader
-              title="Đơn hàng theo ngày"
-              action={
-                <Link href="/orders" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">
-                  Xem đơn hàng <ArrowRight size={12} />
-                </Link>
-              }
+            <CardHeader title="Đơn hàng theo ngày"
+              action={<Link href="/orders" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">Xem đơn hàng <ArrowRight size={12} /></Link>}
             />
             <OrdersChart data={metrics} />
           </Card>
-
           <Card>
-            <CardHeader
-              title="Ads Spend vs Revenue"
-              action={
-                <Link href="/ads" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">
-                  Xem Ads <ArrowRight size={12} />
-                </Link>
-              }
+            <CardHeader title="Ads Spend vs Revenue"
+              action={<Link href="/ads" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">Xem Ads <ArrowRight size={12} /></Link>}
             />
             <AdsSpendRevenueChart data={adsMetrics} />
           </Card>
@@ -288,13 +140,8 @@ export default function DashboardPage() {
         {/* Bottom row */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <Card>
-            <CardHeader
-              title="Top sản phẩm bán chạy"
-              action={
-                <Link href="/products" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">
-                  Xem tất cả <ArrowRight size={12} />
-                </Link>
-              }
+            <CardHeader title="Top sản phẩm bán chạy"
+              action={<Link href="/products" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">Xem tất cả <ArrowRight size={12} /></Link>}
             />
             <TopProductsChart data={topProducts} />
           </Card>
@@ -303,30 +150,22 @@ export default function DashboardPage() {
             <div className="p-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-[var(--color-text)]">Đơn hàng gần đây</h3>
-                {hasFilter && (
-                  <p className="text-xs text-[var(--color-primary)] mt-0.5">Đang lọc — {recentOrders.length} đơn</p>
-                )}
+                {hasFilter && <p className="text-xs text-[var(--color-primary)] mt-0.5">Đang lọc — {recentOrders.length} đơn</p>}
               </div>
-              <Link href="/orders" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">
-                Xem tất cả <ArrowRight size={12} />
-              </Link>
+              <Link href="/orders" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">Xem tất cả <ArrowRight size={12} /></Link>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--color-border)]">
-                    {["Mã đơn", "Kênh", "Doanh thu", "Trạng thái"].map((h) => (
+                    {["Mã đơn","Kênh","Doanh thu","Trạng thái"].map((h) => (
                       <th key={h} className="text-left px-5 py-3 text-xs font-medium text-[var(--color-text-muted)] whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {recentOrders.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-5 py-10 text-center text-sm text-[var(--color-text-muted)]">
-                        Không có đơn hàng phù hợp
-                      </td>
-                    </tr>
+                    <tr><td colSpan={4} className="px-5 py-10 text-center text-sm text-[var(--color-text-muted)]">Không có đơn hàng phù hợp</td></tr>
                   ) : recentOrders.map((o) => (
                     <tr key={o.id} className="border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-surface-2)] transition-colors">
                       <td className="px-5 py-3 font-mono text-xs text-[var(--color-text)]">{o.id}</td>

@@ -8,6 +8,7 @@ import {
   Megaphone,
   Package,
   Users,
+  Activity,
   ChevronRight,
   Zap,
 } from "lucide-react";
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/ads", label: "Ads & Marketing", icon: Megaphone },
   { href: "/products", label: "Sản phẩm", icon: Package },
   { href: "/customers", label: "Khách hàng", icon: Users },
+  { href: "/traffic", label: "Traffic", icon: Activity },
 ];
 
 interface SidebarProps {

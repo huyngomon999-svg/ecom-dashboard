@@ -81,7 +81,7 @@ export default function OrdersPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <Header title="Đơn hàng" subtitle="Quản lý và tra cứu đơn hàng" preset={preset} onPresetChange={setPreset} />
+      <Header title="Đơn hàng" subtitle="Quản lý và tra cứu đơn hàng" />
 
       <div className="flex-1 p-6 space-y-6">
         {/* Summary KPIs */}
