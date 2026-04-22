@@ -40,8 +40,20 @@ export function DateRangePicker({
   }
 
   function handleSelect(range: { from?: Date; to?: Date } | undefined) {
-    setPendingFrom(range?.from);
-    setPendingTo(range?.to);
+    if (!range?.from) {
+      setPendingFrom(undefined);
+      setPendingTo(undefined);
+      return;
+    }
+    // react-day-picker resets (to=undefined) when user clicks before the start date.
+    // Detect this and swap instead so either order works.
+    if (!range.to && pendingFrom && !pendingTo && range.from < pendingFrom) {
+      setPendingTo(pendingFrom);
+      setPendingFrom(range.from);
+      return;
+    }
+    setPendingFrom(range.from);
+    setPendingTo(range.to);
   }
 
   function handleOK() {
@@ -116,6 +128,7 @@ export function DateRangePicker({
               <DayPicker
                 mode="range"
                 selected={{ from: pendingFrom, to: pendingTo }}
+                disabled={{ after: new Date() }}
                 onSelect={(range) => handleSelect(
                   range
                     ? { from: range.from ?? undefined, to: range.to ?? undefined }
