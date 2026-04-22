@@ -11,7 +11,7 @@ import {
   generateCustomerSegments,
 } from "./generator";
 import { calcChange } from "@/lib/formatters";
-import type { KPISummary } from "../types";
+import type { KPISummary, Order } from "../types";
 
 // ─── Pre-generated datasets ──────────────────────────────────────────────────
 
@@ -90,4 +90,51 @@ export function computeKPISummary(
 export function getChannelRevenue(metrics: ReturnType<typeof generateDailyMetrics>) {
   const totalRevenue = metrics.reduce((s, d) => s + d.revenue, 0);
   return generateChannelRevenue(totalRevenue);
+}
+
+// Tính KPI trực tiếp từ danh sách đơn hàng (dùng khi có filter status/channel)
+export function computeKPIFromOrders(
+  currentOrders: Order[],
+  previousOrders: Order[],
+  adsSpendCur = 0,
+  adsSpendPrev = 0,
+  newCustomers = 0,
+  returningCustomers = 0,
+): KPISummary {
+  const sumKey = (arr: Order[], key: keyof Order) =>
+    arr.reduce((s, o) => s + (o[key] as number), 0);
+
+  const curRevenue = sumKey(currentOrders, "revenue");
+  const curProfit  = sumKey(currentOrders, "profit");
+  const curOrders  = currentOrders.length;
+  const curCancelled = currentOrders.filter((o) => o.status === "Đã huỷ").length;
+  const curReturned  = currentOrders.filter((o) => o.status === "Hoàn hàng").length;
+
+  const prevRevenue = sumKey(previousOrders, "revenue");
+  const prevProfit  = sumKey(previousOrders, "profit");
+  const prevOrders  = previousOrders.length;
+
+  const aov     = curOrders  > 0 ? curRevenue  / curOrders  : 0;
+  const prevAov = prevOrders > 0 ? prevRevenue / prevOrders : 0;
+  const roas     = adsSpendCur  > 0 ? curRevenue  / adsSpendCur  : 0;
+  const prevRoas = adsSpendPrev > 0 ? prevRevenue / adsSpendPrev : 0;
+
+  return {
+    totalRevenue: curRevenue,
+    totalOrders:  curOrders,
+    aov,
+    adsSpend:  adsSpendCur,
+    roas,
+    profit:    curProfit,
+    cancelRate:  curOrders > 0 ? (curCancelled / curOrders) * 100 : 0,
+    returnRate:  curOrders > 0 ? (curReturned  / curOrders) * 100 : 0,
+    newCustomers,
+    returningCustomers,
+    revenueChange: calcChange(curRevenue, prevRevenue),
+    ordersChange:  calcChange(curOrders,  prevOrders),
+    aovChange:     calcChange(aov,        prevAov),
+    adsSpendChange: calcChange(adsSpendCur, adsSpendPrev),
+    roasChange:    calcChange(roas,        prevRoas),
+    profitChange:  calcChange(curProfit,   prevProfit),
+  };
 }

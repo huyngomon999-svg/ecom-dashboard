@@ -18,6 +18,7 @@ import { Header } from "@/components/layout/Header";
 import { KPICard } from "@/components/shared/KPICard";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import { FilterBar } from "@/components/shared/FilterBar";
+import { StatusFilter } from "@/components/shared/StatusFilter";
 import { Card, CardHeader } from "@/components/shared/Card";
 import { RevenueChart } from "@/components/charts/RevenueChart";
 import { OrdersChart } from "@/components/charts/OrdersChart";
@@ -35,26 +36,24 @@ import {
   allOrders,
   filterByDateRange,
   computeKPISummary,
+  computeKPIFromOrders,
   getChannelRevenue,
 } from "@/data/mock";
-import type { Channel, OrderStatus, DateRange, DatePreset } from "@/data/types";
-
-const ORDER_STATUSES: OrderStatus[] = [
-  "Đã giao", "Đang giao", "Chờ xác nhận", "Đóng gói", "Đã huỷ", "Hoàn hàng",
-];
+import type { Channel, OrderStatus } from "@/data/types";
 
 export default function DashboardPage() {
   const { preset, setPreset, customRange, setCustomRange, dateRange, previousRange } = useDateRange();
 
-  // Compare range (second date picker) — defaults to auto-previous
+  // Compare range (second date picker)
   const compareRange$ = useDateRange();
   const [useCustomCompare, setUseCustomCompare] = useState(false);
 
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | "">("");
+  const [statuses, setStatuses] = useState<OrderStatus[]>([]);
 
   const compareRange = useCustomCompare ? compareRange$.dateRange : previousRange;
 
+  // daily metrics (cho chart + adsSpend/ROAS)
   const metrics = useMemo(
     () => filterByDateRange(allDailyMetrics, dateRange.from, dateRange.to),
     [dateRange]
@@ -68,15 +67,40 @@ export default function DashboardPage() {
     [dateRange]
   );
 
-  const kpi = useMemo(() => computeKPISummary(metrics, prevMetrics), [metrics, prevMetrics]);
+  // orders filtered by date + channel + status
+  const hasFilter = channels.length > 0 || statuses.length > 0;
+
+  const filteredOrders = useMemo(() => {
+    let data = filterByDateRange(allOrders, dateRange.from, dateRange.to);
+    if (channels.length > 0) data = data.filter((o) => channels.includes(o.channel));
+    if (statuses.length > 0) data = data.filter((o) => statuses.includes(o.status));
+    return data;
+  }, [dateRange, channels, statuses]);
+
+  const filteredPrevOrders = useMemo(() => {
+    let data = filterByDateRange(allOrders, compareRange.from, compareRange.to);
+    if (channels.length > 0) data = data.filter((o) => channels.includes(o.channel));
+    if (statuses.length > 0) data = data.filter((o) => statuses.includes(o.status));
+    return data;
+  }, [compareRange, channels, statuses]);
+
+  // KPI: dùng orders khi có filter, dùng daily metrics khi không
+  const adsSpendCur  = useMemo(() => metrics.reduce((s, d) => s + d.adsSpend, 0), [metrics]);
+  const adsSpendPrev = useMemo(() => prevMetrics.reduce((s, d) => s + d.adsSpend, 0), [prevMetrics]);
+  const newCustomers = useMemo(() => metrics.reduce((s, d) => s + d.newCustomers, 0), [metrics]);
+  const returningCustomers = useMemo(() => metrics.reduce((s, d) => s + d.returningCustomers, 0), [metrics]);
+
+  const kpi = useMemo(() =>
+    hasFilter
+      ? computeKPIFromOrders(filteredOrders, filteredPrevOrders, adsSpendCur, adsSpendPrev, newCustomers, returningCustomers)
+      : computeKPISummary(metrics, prevMetrics),
+    [hasFilter, filteredOrders, filteredPrevOrders, metrics, prevMetrics, adsSpendCur, adsSpendPrev, newCustomers, returningCustomers]
+  );
+
   const channelRevenue = useMemo(() => getChannelRevenue(metrics), [metrics]);
-
-  const recentOrders = useMemo(() => {
-    const base = filterByDateRange(allOrders, dateRange.from, dateRange.to);
-    return (statusFilter ? base.filter((o) => o.status === statusFilter) : base).slice(0, 10);
-  }, [dateRange, statusFilter]);
-
   const topProducts = useMemo(() => allProducts.slice(0, 10), []);
+
+  const recentOrders = useMemo(() => filteredOrders.slice(0, 10), [filteredOrders]);
 
   const sparkline = (key: "revenue" | "orders" | "profit" | "adsSpend") =>
     metrics.slice(-14).map((d) => ({ value: d[key] }));
@@ -93,25 +117,14 @@ export default function DashboardPage() {
       <div className="flex-1 p-6 space-y-6">
         {/* Filter bar */}
         <div className="flex items-center justify-between flex-wrap gap-3">
-          {/* Left: channel + status filters */}
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Left: channel + status */}
+          <div className="flex items-start gap-2 flex-wrap">
             <FilterBar selectedChannels={channels} onChannelsChange={setChannels} />
-            {/* Order status filter */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as OrderStatus | "")}
-              className="h-9 px-3 rounded-lg border text-sm bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-opacity-20 transition-colors cursor-pointer"
-            >
-              <option value="">Tất cả trạng thái</option>
-              {ORDER_STATUSES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            <StatusFilter selected={statuses} onChange={setStatuses} />
           </div>
 
-          {/* Right: main date + compare date */}
+          {/* Right: compare range + main date range */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Compare range */}
             <div className="flex items-center gap-1.5">
               <span className="inline-flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
                 <GitCompare size={13} />
@@ -144,7 +157,6 @@ export default function DashboardPage() {
 
             <div className="w-px h-5 bg-[var(--color-border)]" />
 
-            {/* Main date range */}
             <DateRangePicker
               preset={preset}
               dateRange={dateRange}
@@ -275,7 +287,6 @@ export default function DashboardPage() {
 
         {/* Bottom row */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          {/* Top products */}
           <Card>
             <CardHeader
               title="Top sản phẩm bán chạy"
@@ -288,11 +299,13 @@ export default function DashboardPage() {
             <TopProductsChart data={topProducts} />
           </Card>
 
-          {/* Recent orders */}
           <Card noPadding>
             <div className="p-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-[var(--color-text)]">Đơn hàng gần đây</h3>
+                {hasFilter && (
+                  <p className="text-xs text-[var(--color-primary)] mt-0.5">Đang lọc — {recentOrders.length} đơn</p>
+                )}
               </div>
               <Link href="/orders" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">
                 Xem tất cả <ArrowRight size={12} />
@@ -308,7 +321,13 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentOrders.map((o) => (
+                  {recentOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-10 text-center text-sm text-[var(--color-text-muted)]">
+                        Không có đơn hàng phù hợp
+                      </td>
+                    </tr>
+                  ) : recentOrders.map((o) => (
                     <tr key={o.id} className="border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-surface-2)] transition-colors">
                       <td className="px-5 py-3 font-mono text-xs text-[var(--color-text)]">{o.id}</td>
                       <td className="px-5 py-3 text-xs text-[var(--color-text-muted)]">{o.channel}</td>
