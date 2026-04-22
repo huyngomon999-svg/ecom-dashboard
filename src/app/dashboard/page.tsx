@@ -10,6 +10,7 @@ import {
   UserPlus,
   RefreshCw,
   ArrowRight,
+  GitCompare,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -26,7 +27,7 @@ import { TopProductsChart } from "@/components/charts/ProductsChart";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 
 import { useDateRange } from "@/hooks/useDateRange";
-import { formatVND, formatNumber, formatROAS, formatPercent } from "@/lib/formatters";
+import { formatVND, formatNumber, formatROAS } from "@/lib/formatters";
 import {
   allDailyMetrics,
   allDailyAdsMetrics,
@@ -36,19 +37,31 @@ import {
   computeKPISummary,
   getChannelRevenue,
 } from "@/data/mock";
-import type { Channel } from "@/data/types";
+import type { Channel, OrderStatus, DateRange, DatePreset } from "@/data/types";
+
+const ORDER_STATUSES: OrderStatus[] = [
+  "Đã giao", "Đang giao", "Chờ xác nhận", "Đóng gói", "Đã huỷ", "Hoàn hàng",
+];
 
 export default function DashboardPage() {
   const { preset, setPreset, customRange, setCustomRange, dateRange, previousRange } = useDateRange();
+
+  // Compare range (second date picker) — defaults to auto-previous
+  const compareRange$ = useDateRange();
+  const [useCustomCompare, setUseCustomCompare] = useState(false);
+
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | "">("");
+
+  const compareRange = useCustomCompare ? compareRange$.dateRange : previousRange;
 
   const metrics = useMemo(
     () => filterByDateRange(allDailyMetrics, dateRange.from, dateRange.to),
     [dateRange]
   );
   const prevMetrics = useMemo(
-    () => filterByDateRange(allDailyMetrics, previousRange.from, previousRange.to),
-    [previousRange]
+    () => filterByDateRange(allDailyMetrics, compareRange.from, compareRange.to),
+    [compareRange]
   );
   const adsMetrics = useMemo(
     () => filterByDateRange(allDailyAdsMetrics, dateRange.from, dateRange.to),
@@ -58,7 +71,11 @@ export default function DashboardPage() {
   const kpi = useMemo(() => computeKPISummary(metrics, prevMetrics), [metrics, prevMetrics]);
   const channelRevenue = useMemo(() => getChannelRevenue(metrics), [metrics]);
 
-  const recentOrders = useMemo(() => allOrders.slice(0, 8), []);
+  const recentOrders = useMemo(() => {
+    const base = filterByDateRange(allOrders, dateRange.from, dateRange.to);
+    return (statusFilter ? base.filter((o) => o.status === statusFilter) : base).slice(0, 10);
+  }, [dateRange, statusFilter]);
+
   const topProducts = useMemo(() => allProducts.slice(0, 10), []);
 
   const sparkline = (key: "revenue" | "orders" | "profit" | "adsSpend") =>
@@ -76,13 +93,65 @@ export default function DashboardPage() {
       <div className="flex-1 p-6 space-y-6">
         {/* Filter bar */}
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <FilterBar selectedChannels={channels} onChannelsChange={setChannels} />
-          <DateRangePicker
-            preset={preset}
-            dateRange={dateRange}
-            onPresetChange={setPreset}
-            onCustomRange={(r) => setCustomRange(r)}
-          />
+          {/* Left: channel + status filters */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <FilterBar selectedChannels={channels} onChannelsChange={setChannels} />
+            {/* Order status filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as OrderStatus | "")}
+              className="h-9 px-3 rounded-lg border text-sm bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-opacity-20 transition-colors cursor-pointer"
+            >
+              <option value="">Tất cả trạng thái</option>
+              {ORDER_STATUSES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Right: main date + compare date */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Compare range */}
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
+                <GitCompare size={13} />
+                So sánh:
+              </span>
+              {useCustomCompare ? (
+                <>
+                  <DateRangePicker
+                    preset={compareRange$.preset}
+                    dateRange={compareRange$.dateRange}
+                    onPresetChange={compareRange$.setPreset}
+                    onCustomRange={(r) => compareRange$.setCustomRange(r)}
+                  />
+                  <button
+                    onClick={() => setUseCustomCompare(false)}
+                    className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-danger)] underline"
+                  >
+                    Tự động
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setUseCustomCompare(true)}
+                  className="h-9 px-3 rounded-lg border border-dashed text-xs font-medium text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] transition-colors"
+                >
+                  Tuỳ chỉnh kỳ so sánh
+                </button>
+              )}
+            </div>
+
+            <div className="w-px h-5 bg-[var(--color-border)]" />
+
+            {/* Main date range */}
+            <DateRangePicker
+              preset={preset}
+              dateRange={dateRange}
+              onPresetChange={setPreset}
+              onCustomRange={(r) => setCustomRange(r)}
+            />
+          </div>
         </div>
 
         {/* KPI Grid */}
