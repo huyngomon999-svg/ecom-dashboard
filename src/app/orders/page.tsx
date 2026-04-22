@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Search, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight as ChevronRightIcon,
   Upload, X, ShoppingCart, DollarSign, TrendingUp, XCircle,
@@ -15,6 +15,10 @@ import type { ImportSource } from "@/components/shared/OrderImporter";
 import { useDateRange } from "@/hooks/useDateRange";
 import { formatVND, formatDateFull, formatNumber } from "@/lib/formatters";
 import { allOrders, filterByDateRange } from "@/data/mock";
+import {
+  getStoredOrders, getSourceMeta, saveSourceOrders, clearSourceOrders, clearAllOrders,
+  type OrderSource,
+} from "@/lib/ordersStore";
 import type { Channel, Order, OrderStatus } from "@/data/types";
 
 const PAGE_SIZE = 20;
@@ -50,26 +54,48 @@ export default function OrdersPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
 
-  // ── Import state ──────────────────────────────────────────────────────────
-  const [importSource, setImportSource]   = useState<ImportSource | null>(null);
-  const [importedOrders, setImportedOrders] = useState<Order[] | null>(null);
-  const [importLabel, setImportLabel]     = useState("");
+  // ── Import / persist state ────────────────────────────────────────────────
+  const [importSource, setImportSource] = useState<ImportSource | null>(null);
+  const [storedMeta, setStoredMeta]     = useState<{ source: OrderSource; count: number }[]>([]);
+  const [liveImported, setLiveImported] = useState<Order[]>([]);   // in-memory after page load
+
+  // Load persisted orders on mount
+  useEffect(() => {
+    const stored = getStoredOrders();
+    if (stored.length > 0) setLiveImported(stored);
+    setStoredMeta(getSourceMeta());
+  }, []);
 
   function handleImport(orders: Order[]) {
-    setImportedOrders(orders);
-    setImportLabel(`${orders.length.toLocaleString()} đơn từ ${importSource}`);
+    if (!importSource) return;
+    saveSourceOrders(importSource as OrderSource, orders);
+    // Merge with other stored sources
+    const merged = getStoredOrders();
+    setLiveImported(merged);
+    setStoredMeta(getSourceMeta());
     setImportSource(null);
     setPage(1);
   }
 
-  function clearImport() {
-    setImportedOrders(null);
-    setImportLabel("");
+  function handleClearSource(source: OrderSource) {
+    clearSourceOrders(source);
+    const merged = getStoredOrders();
+    setLiveImported(merged);
+    setStoredMeta(getSourceMeta());
     setPage(1);
   }
 
-  // ── Base dataset: imported or mock ────────────────────────────────────────
-  const baseOrders = importedOrders ?? allOrders;
+  function handleClearAll() {
+    clearAllOrders();
+    setLiveImported([]);
+    setStoredMeta([]);
+    setPage(1);
+  }
+
+  const hasImport = liveImported.length > 0;
+
+  // ── Base dataset: imported (persisted) or mock ────────────────────────────
+  const baseOrders = hasImport ? liveImported : allOrders;
 
   const filtered = useMemo(() => {
     let data = filterByDateRange(baseOrders, dateRange.from, dateRange.to);
@@ -113,19 +139,23 @@ export default function OrdersPage() {
 
       <div className="flex-1 p-6 space-y-6">
         {/* ── Import banner ── */}
-        {importedOrders && (
-          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[var(--color-primary)] bg-[var(--color-primary-soft)]">
-            <p className="text-xs font-medium text-[var(--color-primary)]">
-              Đang hiển thị dữ liệu thực: <span className="font-semibold">{importLabel}</span>
-              {filtered.length < importedOrders.length && (
-                <span className="font-normal"> · {filtered.length.toLocaleString()} đơn khớp bộ lọc hiện tại</span>
-              )}
-            </p>
-            <button
-              onClick={clearImport}
-              className="h-7 px-3 rounded-lg text-xs font-medium border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-white/20 transition-colors inline-flex items-center gap-1"
-            >
-              <X size={12} /> Xoá import
+        {hasImport && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-[var(--color-primary)] bg-[var(--color-primary-soft)] flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-xs font-medium text-[var(--color-primary)]">Dữ liệu thực:</p>
+              {storedMeta.map((m) => (
+                <span key={m.source} className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-primary)]">
+                  {m.source} ({m.count.toLocaleString()} đơn)
+                  <button onClick={() => handleClearSource(m.source)}
+                    className="hover:text-[var(--color-danger)] transition-colors">
+                    <X size={11} />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <button onClick={handleClearAll}
+              className="h-7 px-3 rounded-lg text-xs font-medium border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-white/20 transition-colors inline-flex items-center gap-1">
+              <X size={12} /> Xoá tất cả
             </button>
           </div>
         )}
@@ -238,7 +268,7 @@ export default function OrdersPage() {
                 {paged.length === 0 ? (
                   <tr>
                     <td colSpan={11} className="px-4 py-12 text-center text-sm text-[var(--color-text-muted)]">
-                      {importedOrders
+                      {hasImport
                         ? "Không có đơn nào trong khoảng ngày này — thử điều chỉnh bộ lọc ngày"
                         : "Không có đơn hàng nào"}
                     </td>

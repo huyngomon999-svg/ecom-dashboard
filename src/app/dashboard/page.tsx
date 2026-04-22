@@ -1,10 +1,11 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   DollarSign, ShoppingCart, TrendingUp,
-  Megaphone, BarChart2, Users, UserPlus, RefreshCw, ArrowRight,
+  Megaphone, BarChart2, Users, UserPlus, RefreshCw, ArrowRight, Activity,
 } from "lucide-react";
 import Link from "next/link";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 
 import { Header } from "@/components/layout/Header";
 import { KPICard } from "@/components/shared/KPICard";
@@ -25,12 +26,16 @@ import {
   allDailyMetrics, allDailyAdsMetrics, allProducts, allOrders,
   filterByDateRange, computeKPISummary, computeKPIFromOrders, getChannelRevenue,
 } from "@/data/mock";
+import { loadTraffic, type TrafficStore, EMPTY_TRAFFIC } from "@/lib/trafficStore";
 import type { Channel, OrderStatus } from "@/data/types";
 
 export default function DashboardPage() {
   const { preset, setPreset, customRange, setCustomRange, dateRange, previousRange } = useDateRange();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [statuses, setStatuses] = useState<OrderStatus[]>([]);
+  const [trafficStore, setTrafficStore] = useState<TrafficStore>(EMPTY_TRAFFIC);
+
+  useEffect(() => { setTrafficStore(loadTraffic()); }, []);
 
   const metrics     = useMemo(() => filterByDateRange(allDailyMetrics,    dateRange.from,    dateRange.to),    [dateRange]);
   const prevMetrics = useMemo(() => filterByDateRange(allDailyMetrics,    previousRange.from, previousRange.to), [previousRange]);
@@ -136,6 +141,78 @@ export default function DashboardPage() {
             <AdsSpendRevenueChart data={adsMetrics} />
           </Card>
         </div>
+
+        {/* Traffic chart row */}
+        {(() => {
+          const trafficChart = (() => {
+            const map: Record<string, number> = {};
+            trafficStore.rows.forEach((r) => {
+              if (!r.date) return;
+              map[r.date] = (map[r.date] || 0) + r.sessions;
+            });
+            return Object.entries(map)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .slice(-60)
+              .map(([date, sessions]) => ({ date, sessions }));
+          })();
+          const totalSessions = trafficStore.rows.reduce((s, r) => s + r.sessions, 0);
+          const totalUsers    = trafficStore.rows.reduce((s, r) => s + r.users, 0);
+          if (trafficStore.rows.length === 0) return (
+            <Card className="border-dashed">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-[var(--color-surface-2)] flex items-center justify-center">
+                    <Activity size={16} className="text-[var(--color-text-muted)]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--color-text)]">Lượt truy cập</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">Chưa có dữ liệu traffic</p>
+                  </div>
+                </div>
+                <Link href="/traffic" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">
+                  Upload file <ArrowRight size={12} />
+                </Link>
+              </div>
+            </Card>
+          );
+          return (
+            <Card>
+              <CardHeader
+                title="Lượt truy cập (Traffic)"
+                description={`${trafficStore.files.length} file · ${trafficStore.rows.length.toLocaleString()} điểm dữ liệu`}
+                action={<Link href="/traffic" className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline">Quản lý <ArrowRight size={12} /></Link>}
+              />
+              <div className="flex items-center gap-6 mb-4">
+                <div>
+                  <p className="text-xs text-[var(--color-text-muted)]">Tổng Sessions</p>
+                  <p className="text-xl font-bold text-[var(--color-text)]">{formatNumber(totalSessions, true)}</p>
+                </div>
+                {totalUsers > 0 && (
+                  <div>
+                    <p className="text-xs text-[var(--color-text-muted)]">Tổng Users</p>
+                    <p className="text-xl font-bold text-[var(--color-text)]">{formatNumber(totalUsers, true)}</p>
+                  </div>
+                )}
+              </div>
+              <ResponsiveContainer width="100%" height={160}>
+                <AreaChart data={trafficChart} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="trafficGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false}
+                    interval={Math.max(0, Math.floor(trafficChart.length / 8) - 1)} />
+                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <Tooltip contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 12, fontSize: 12 }} />
+                  <Area type="monotone" dataKey="sessions" name="Sessions" stroke="#3b82f6" strokeWidth={2} fill="url(#trafficGrad)" dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </Card>
+          );
+        })()}
 
         {/* Bottom row */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
