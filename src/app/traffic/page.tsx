@@ -27,7 +27,6 @@ interface ColMap {
   users?: string;
   pageviews?: string;
   bounceRate?: string;
-  source?: string;
 }
 
 const CANDIDATES: Record<keyof ColMap, string[]> = {
@@ -36,8 +35,10 @@ const CANDIDATES: Record<keyof ColMap, string[]> = {
   users:      ["users","user","người dùng","unique visitors","active users","ga:users"],
   pageviews:  ["pageviews","pageview","page views","views","lượt xem","ga:pageviews"],
   bounceRate: ["bounce rate","bouncerate","bounce","tỷ lệ thoát","ga:bouncerate"],
-  source:     ["source","nguồn","channel","kênh","medium","traffic source","default channel"],
 };
+
+const PLATFORMS = ["TikTok Shop","Facebook","Website","Shopee","Google","Zalo","Khác"] as const;
+type Platform = typeof PLATFORMS[number];
 
 function autoDetect(headers: string[]): ColMap {
   const lower = headers.map((h) => h.toLowerCase().trim());
@@ -72,15 +73,15 @@ function parseFile(file: File): Promise<{ headers: string[]; rows: RawRow[] }> {
   });
 }
 
-function convertRows(rows: RawRow[], cols: ColMap): Omit<TrafficRow, "_fileId">[] {
+function convertRows(rows: RawRow[], cols: ColMap, platform: string): Omit<TrafficRow, "_fileId">[] {
   return rows
     .map((row) => ({
-      date:          cols.date        ? String(row[cols.date]   ?? "") : "",
+      date:          cols.date ? String(row[cols.date] ?? "") : "",
       sessions:      numVal(row, cols.sessions),
       users:         numVal(row, cols.users),
       pageviews:     numVal(row, cols.pageviews),
       bounceRate:    numVal(row, cols.bounceRate),
-      trafficSource: cols.source      ? String(row[cols.source] ?? "") : "",
+      trafficSource: platform,
     }))
     .filter((r) => r.date !== "" || r.sessions > 0 || r.users > 0);
 }
@@ -89,7 +90,7 @@ function convertRows(rows: RawRow[], cols: ColMap): Omit<TrafficRow, "_fileId">[
 
 const COL_LABELS: Record<keyof ColMap, string> = {
   date: "Ngày/Thời gian", sessions: "Sessions", users: "Users",
-  pageviews: "Pageviews", bounceRate: "Bounce Rate", source: "Nguồn traffic",
+  pageviews: "Pageviews", bounceRate: "Bounce Rate",
 };
 
 type UploadStep = "upload" | "map";
@@ -99,13 +100,14 @@ export default function TrafficPage() {
   const [showUploader, setShowUploader] = useState(false);
 
   // Upload flow state
-  const [uploadStep, setUploadStep] = useState<UploadStep>("upload");
-  const [fileName, setFileName]     = useState("");
-  const [headers, setHeaders]       = useState<string[]>([]);
-  const [rawRows, setRawRows]       = useState<RawRow[]>([]);
-  const [cols, setCols]             = useState<ColMap>({});
-  const [error, setError]           = useState("");
-  const [dragging, setDragging]     = useState(false);
+  const [uploadStep, setUploadStep]     = useState<UploadStep>("upload");
+  const [importPlatform, setImportPlatform] = useState<Platform>("Website");
+  const [fileName, setFileName]         = useState("");
+  const [headers, setHeaders]           = useState<string[]>([]);
+  const [rawRows, setRawRows]           = useState<RawRow[]>([]);
+  const [cols, setCols]                 = useState<ColMap>({});
+  const [error, setError]               = useState("");
+  const [dragging, setDragging]         = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Load from localStorage on mount
@@ -132,8 +134,9 @@ export default function TrafficPage() {
   }, []);
 
   function confirmImport() {
-    const converted = convertRows(rawRows, cols);
-    const next = appendTraffic(converted, { name: fileName, rowCount: converted.length });
+    const converted = convertRows(rawRows, cols, importPlatform);
+    const label = `${fileName} (${importPlatform})`;
+    const next = appendTraffic(converted, { name: label, rowCount: converted.length });
     setStore(next);
     resetUploader();
   }
@@ -141,6 +144,7 @@ export default function TrafficPage() {
   function resetUploader() {
     setShowUploader(false);
     setUploadStep("upload");
+    setImportPlatform("Website");
     setFileName(""); setHeaders([]); setRawRows([]); setCols({}); setError("");
   }
 
@@ -276,7 +280,29 @@ export default function TrafficPage() {
                     <span className="text-[var(--color-text-muted)]">· {rawRows.length.toLocaleString()} hàng · {headers.length} cột</span>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                  {/* Platform selector */}
+                  <div>
+                    <p className="text-[11px] font-medium text-[var(--color-text-muted)] mb-2">Nguồn traffic (platform)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {PLATFORMS.map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setImportPlatform(p)}
+                          className={cn(
+                            "h-8 px-3 rounded-lg border text-xs font-medium transition-colors",
+                            importPlatform === p
+                              ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                              : "bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]"
+                          )}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Column mapping */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
                     {(Object.keys(COL_LABELS) as (keyof ColMap)[]).map((key) => (
                       <div key={key}>
                         <label className="text-[11px] font-medium text-[var(--color-text-muted)] block mb-1">{COL_LABELS[key]}</label>
@@ -304,7 +330,7 @@ export default function TrafficPage() {
                       onClick={confirmImport}
                       className="h-9 px-4 rounded-lg text-xs font-medium bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] inline-flex items-center gap-1.5 transition-colors"
                     >
-                      <Plus size={13} /> Thêm {convertRows(rawRows, cols).length.toLocaleString()} hàng vào kho
+                      <Plus size={13} /> Thêm {convertRows(rawRows, cols, importPlatform).length.toLocaleString()} hàng ({importPlatform})
                     </button>
                   </div>
                 </div>
